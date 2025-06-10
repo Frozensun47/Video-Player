@@ -3,10 +3,17 @@ package com.example.videoplayer
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -17,30 +24,23 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 
-
+// ✅ Add the OptIn annotation here
+@OptIn(UnstableApi::class)
 @Composable
 fun VideoPlayerWithScrubber(uri: Uri) {
     val context = LocalContext.current
 
-    @OptIn(androidx.media3.common.util.UnstableApi::class)
     val exoPlayer = remember(uri) {
         ExoPlayer.Builder(context).build().apply {
-            isScrubbingModeEnabled = true
             setMediaItem(MediaItem.fromUri(uri))
             prepare()
-            playWhenReady = true
         }
     }
 
-
     var sliderPosition by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
+    var isPlaying by remember { mutableStateOf(exoPlayer.isPlaying) }
     var isDragging by remember { mutableStateOf(false) }
-    var wasPlayingBeforeDrag by remember { mutableStateOf(false) }
-
-    DisposableEffect(Unit) {
-        onDispose { exoPlayer.release() }
-    }
 
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
@@ -49,12 +49,17 @@ fun VideoPlayerWithScrubber(uri: Uri) {
                     duration = exoPlayer.duration.coerceAtLeast(0L)
                 }
             }
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
         }
         exoPlayer.addListener(listener)
-        onDispose { exoPlayer.removeListener(listener) }
+        onDispose {
+            exoPlayer.removeListener(listener)
+            exoPlayer.release()
+        }
     }
 
-    // Update slider when not dragging
     LaunchedEffect(Unit) {
         while (true) {
             if (!isDragging) {
@@ -64,37 +69,53 @@ fun VideoPlayerWithScrubber(uri: Uri) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        AndroidView(
-            factory = {
-                PlayerView(context).apply {
-                    player = exoPlayer
-                    useController = false
-                }
-            },
+    Column(modifier = Modifier
+        .fillMaxSize()
+        .padding(16.dp)) {
+
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f) // 🔥 video fills remaining height
-        )
+                .weight(1f)
+        ) {
+            AndroidView(
+                factory = {
+                    PlayerView(context).apply {
+                        player = exoPlayer
+                        useController = false
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            IconButton(
+                onClick = { exoPlayer.playWhenReady = !isPlaying },
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    tint = Color.White,
+                    modifier = Modifier.size(64.dp)
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Slider(
-            value = sliderPosition.coerceAtMost(duration).toFloat(),
+            value = sliderPosition.toFloat(),
             onValueChange = {
                 if (!isDragging) {
                     isDragging = true
-                    wasPlayingBeforeDrag = exoPlayer.isPlaying
-                    exoPlayer.playWhenReady = false
+                    exoPlayer.setScrubbingModeEnabled(true)
                 }
                 sliderPosition = it.toLong()
                 exoPlayer.seekTo(sliderPosition)
             },
             onValueChangeFinished = {
                 isDragging = false
-                if (wasPlayingBeforeDrag) {
-                    exoPlayer.playWhenReady = true
-                }
+                exoPlayer.setScrubbingModeEnabled(false)
             },
             valueRange = 0f..duration.toFloat(),
             modifier = Modifier.fillMaxWidth()
@@ -105,6 +126,4 @@ fun VideoPlayerWithScrubber(uri: Uri) {
             modifier = Modifier.align(alignment = androidx.compose.ui.Alignment.CenterHorizontally)
         )
     }
-
 }
-

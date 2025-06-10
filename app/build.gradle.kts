@@ -55,7 +55,7 @@ dependencies {
 
     // Material 3
     implementation("androidx.compose.material3:material3")
-
+    implementation("androidx.compose.material:material-icons-extended:1.6.7")
     // ExoPlayer
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-ui:1.3.1")
